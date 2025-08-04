@@ -277,24 +277,36 @@ class IntelligentOMTool:
         print("="*60)
         print("启动银河麒麟智能运维管家工具 - 金融行业版")
         print("="*60)
-        
         self.start_time = datetime.now()
-        
+
         if not targets:
             targets = {
-                'web_target': 'https://xss-challenge-tour.bachang.org/level1.php?name=testS',
+                'web_target': None,  # 默认不扫描
                 'scan_dir': '/home/zy2/test',
                 'log_config': {'use_default': True}
             }
-        
-        # 1. SQL注入检测
-        print("\n[1/7] SQL注入安全检测...")
-        print(f"目标: {targets['web_target']}")
-        sql_result = self._safe_execute_with_timing(
-            lambda: run_sqlmap(targets['web_target']),
-            "sqlmap_scanner"
-        )
-        
+
+        # 1. SQL注入检测 (可选)
+        if targets.get('web_target'):
+            print("\n[1/7] SQL注入安全检测...")
+            print(f"目标: {targets['web_target']}")
+            sql_result = self._safe_execute_with_timing(
+                lambda: run_sqlmap(targets['web_target']),
+                "sqlmap_scanner"
+            )
+        else:
+            print("\n[1/7] SQL注入安全检测... 跳过")
+            # 添加一个跳过的结果记录
+            sql_result = {
+                'module': 'sqlmap_scanner',
+                'status': 'skipped',
+                'message': '用户选择跳过SQL注入检测',
+                'timestamp': datetime.now().isoformat(),
+                'vulnerabilities': [],
+                'execution_time': 0.0
+            }
+            self.results.append(sql_result)
+
         # 2. 日志异常分析
         print("\n[2/7] 日志异常智能分析...")
         if targets.get('log_config', {}).get('use_default', True):
@@ -302,43 +314,41 @@ class IntelligentOMTool:
         else:
             log_file = targets['log_config'].get('log_file', '未指定')
             print(f"分析日志文件: {log_file}")
-        
         log_result = self._safe_execute_with_timing(
             lambda: run_loglizer_analyzer(targets.get('log_config')),
             "log_analyzer"
         )
-        
+
         # 3. 配置优化检测 - 扩展为多个组件
         print("\n[3-6/7] 系统配置安全检测...")
-        
         # Nginx配置检查
-        print("  [3/7] 检查 Nginx 配置...")
+        print(" [3/7] 检查 Nginx 配置...")
         nginx_result = self._safe_execute_with_timing(
             lambda: check_nginx_config(),
             "nginx_config"
         )
-        
+
         # MySQL配置检查
-        print("  [4/7] 检查 MySQL 配置...")
+        print(" [4/7] 检查 MySQL 配置...")
         mysql_result = self._safe_execute_with_timing(
             lambda: check_mysql_config(),
             "mysql_config"
         )
-        
+
         # Redis配置检查
-        print("  [5/7] 检查 Redis 配置...")
+        print(" [5/7] 检查 Redis 配置...")
         redis_result = self._safe_execute_with_timing(
             lambda: check_redis_config(),
             "redis_config"
         )
-        
+
         # 系统安全配置检查
-        print("  [6/7] 检查系统安全配置...")
+        print(" [6/7] 检查系统安全配置...")
         system_result = self._safe_execute_with_timing(
             lambda: check_system_security(),
             "system_security"
         )
-        
+
         # 4. 漏洞扫描
         print("\n[7/7] 系统漏洞安全扫描...")
         print(f"目标目录: {targets['scan_dir']}")
@@ -346,23 +356,22 @@ class IntelligentOMTool:
             lambda: scan_vulnerabilities(targets['scan_dir']),
             "vuln_scanner"
         )
-        
+
         self.end_time = datetime.now()
-        
+
         # 5. 生成综合报告
         report = self._generate_report()
-        
+
         # 6. 执行增强版评估
         print("\n执行系统评估...")
         evaluator = OMToolEvaluator()
-        
         # 为评估器准备增强的数据
         enhanced_results = self._prepare_results_for_evaluation()
         evaluation_report = evaluator.generate_evaluation_report(enhanced_results)
         report['evaluation'] = evaluation_report
-        
+
         return report
-    
+        
     def _safe_execute_with_timing(self, func, module_name: str) -> Dict[str, Any]:
         """安全执行模块函数，统一异常处理并记录时间"""
         start_time = time.time()
@@ -679,6 +688,7 @@ class IntelligentOMTool:
 
 
 def get_user_targets() -> Dict[str, Any]:
+    # SQL注入检测目标
     web_target = get_sql_target()
     
     # 扫描目录输入
@@ -689,29 +699,27 @@ def get_user_targets() -> Dict[str, Any]:
     
     # 确认信息
     print(f"\n扫描配置确认:")
-    print(f"   Web目标: {web_target}")
-    print(f"   扫描目录: {scan_dir}")
-    
-    if log_config.get('use_default'):
-        print(f"   日志数据: 默认示例数据 (HDFS)")
+    if web_target:
+        print(f" SQL注入检测目标: {web_target}")
     else:
-        print(f"   日志文件: {log_config.get('log_file', '未指定')}")
-        if log_config.get('label_file'):
-            print(f"   标签文件: {log_config['label_file']}")
+        print(f" SQL注入检测: 跳过")
+    print(f" 漏洞扫描目录: {scan_dir}")
+    if log_config.get('use_default'):
+        print(f" 日志数据: 默认示例数据 (HDFS)")
+    else:
+        print(f" 日志文件: {log_config.get('log_file', '未指定')}")
     
     confirm = input("\n是否开始扫描? (Y/n): ").strip().lower()
     if confirm in ['n', 'no']:
         print("用户取消扫描")
         exit(0)
     
-    
-    
     return {
-        'web_target': web_target,
+        'web_target': web_target,  # 可能为None
         'scan_dir': scan_dir,
         'log_config': log_config
     }
-
+    
 def main():
     """主入口函数"""
     print("银河麒麟智能运维管家工具 - 金融行业版")
@@ -789,95 +797,466 @@ def main():
     return report
 
 if __name__ == "__main__":
-    main()        
+    main()  
 	</pre>
     </div>
     
     <div class="code-section">
         <h2>sqlmap_module.py</h2>
         <pre>
+# -*- coding: utf-8 -*-
 # sqlmap_module.py
 # 调用sqlmap, 检测数据库问题
-import subprocess  # 用于执行命令行工具
-import os          # 用于处理路径
-
+import subprocess
+import os
+import re
+import json
+from datetime import datetime
 
 def get_sql_target():
-    """获取用户输入的扫描目标"""
-    print("\n=== 扫描目标配置 ===")
-    
-    # Web目标URL输入
-    while True:
-        web_target = input("请输入Web扫描URL (回车使用默认测试站点): ").strip()
-        if not web_target:
-            web_target = 'https://xss-challenge-tour.bachang.org/level1.php?name=testS'
-            print(f"使用默认URL: {web_target}")
-            break
-        if web_target.startswith(('http://', 'https://')):
-            print(f"目标URL: {web_target}")
-            break
-        print("请输入有效URL (需要包含 http:// 或 https://)")
-    return web_target
+   """获取用户输入的扫描目标"""
+   print("\n=== SQL注入检测配置 ===")
+   print("请选择扫描模式:")
+   print("1. 输入Web应用URL进行SQL注入检测")
+   print("2. 跳过SQL注入检测")
+   
+   while True:
+       choice = input("请选择 (1/2): ").strip()
+       if choice in ['1', '2']:
+           break
+       print("无效选择，请输入 1 或 2")
+   
+   if choice == '2':
+       print("跳过SQL注入检测模块")
+       return None
+   
+   # 选择了SQL注入检测
+   print("\n请输入要检测的Web应用URL:")
+   print("示例: https://example.com/login.php?id=1")
+   print("注意: 请确保您有权限对目标进行安全测试")
+   
+   while True:
+       web_target = input("Web应用URL (输入 'skip' 跳过): ").strip()
+       
+       if web_target.lower() == 'skip':
+           print("跳过SQL注入检测")
+           return None
+           
+       if not web_target:
+           print("URL不能为空，请重新输入或输入 'skip' 跳过")
+           continue
+           
+       if not web_target.startswith(('http://', 'https://')):
+           print("请输入完整的URL (需要包含 http:// 或 https://)")
+           continue
+           
+       # 确认扫描
+       print(f"\n目标URL: {web_target}")
+       confirm = input("确认对此URL进行SQL注入检测? (y/n): ").strip().lower()
+       
+       if confirm in ['y', 'yes']:
+           print(f"已确认扫描目标: {web_target}")
+           return web_target
+       elif confirm in ['n', 'no']:
+           print("请重新输入URL或选择跳过")
+           continue
+       else:
+           print("请输入 y 或 n")
+           continue
+
+def assess_sql_injection_risk(sqlmap_output):
+   """基于SQLMap输出评估SQL注入风险等级"""
+   risk_factors = {
+       'database_access': False,
+       'data_extraction': False,
+       'privilege_escalation': False,
+       'file_system_access': False,
+       'injection_found': False
+   }
+   
+   output_lower = sqlmap_output.lower()
+   
+   # 分析SQLMap输出结果中的关键指标
+   if any(keyword in output_lower for keyword in ['injection', 'vulnerable', 'payload']):
+       risk_factors['injection_found'] = True
+   
+   if any(keyword in output_lower for keyword in ['database', 'schema', 'tables']):
+       risk_factors['database_access'] = True
+   
+   if any(keyword in output_lower for keyword in ['dump', 'data', 'entries']):
+       risk_factors['data_extraction'] = True
+   
+   if any(keyword in output_lower for keyword in ['dba', 'privileges', 'admin']):
+       risk_factors['privilege_escalation'] = True
+   
+   if any(keyword in output_lower for keyword in ['file', 'read', 'write']):
+       risk_factors['file_system_access'] = True
+   
+   # 计算综合风险评分
+   risk_score = sum(risk_factors.values()) * 20
+   
+   if risk_score >= 80:
+       return "CRITICAL", risk_factors
+   elif risk_score >= 60:
+       return "HIGH", risk_factors
+   elif risk_score >= 40:
+       return "MEDIUM", risk_factors
+   elif risk_score >= 20:
+       return "LOW", risk_factors
+   else:
+       return "SAFE", risk_factors
+
+def identify_injection_types(sqlmap_output):
+   """识别SQL注入类型"""
+   injection_types = []
+   output_lower = sqlmap_output.lower()
+   
+   if 'union' in output_lower:
+       injection_types.append('Union-based SQL injection')
+   if 'boolean' in output_lower or 'blind' in output_lower:
+       injection_types.append('Boolean-based blind SQL injection')
+   if 'time' in output_lower and 'delay' in output_lower:
+       injection_types.append('Time-based blind SQL injection')
+   if 'error' in output_lower:
+       injection_types.append('Error-based SQL injection')
+   if 'stacked' in output_lower:
+       injection_types.append('Stacked queries')
+   
+   return injection_types if injection_types else ['Generic SQL injection']
+
+def extract_database_info(sqlmap_output):
+   """提取数据库信息"""
+   db_info = {
+       'database_type': 'Unknown',
+       'version': 'Unknown',
+       'user': 'Unknown',
+       'databases': []
+   }
+   
+   # 数据库类型识别
+   output_lower = sqlmap_output.lower()
+   if 'mysql' in output_lower:
+       db_info['database_type'] = 'MySQL'
+   elif 'postgresql' in output_lower:
+       db_info['database_type'] = 'PostgreSQL'
+   elif 'oracle' in output_lower:
+       db_info['database_type'] = 'Oracle'
+   elif 'mssql' in output_lower or 'sql server' in output_lower:
+       db_info['database_type'] = 'Microsoft SQL Server'
+   elif 'sqlite' in output_lower:
+       db_info['database_type'] = 'SQLite'
+   
+   # 版本信息提取
+   version_patterns = [
+       r'version[:\s]+([0-9\.]+)',
+       r'([0-9]+\.[0-9]+\.[0-9]+)',
+       r'version\s*([0-9\.]+)'
+   ]
+   
+   for pattern in version_patterns:
+       match = re.search(pattern, sqlmap_output, re.IGNORECASE)
+       if match:
+           db_info['version'] = match.group(1)
+           break
+   
+   return db_info
+
+def generate_sql_injection_fix_recommendations(vulnerability_info, risk_level, risk_factors):
+   """生成SQL注入漏洞修复建议"""
+   
+   base_recommendations = {
+       'immediate_actions': [
+           "立即审查受影响的SQL查询代码",
+           "暂时限制对受影响接口的访问",
+           "启用详细的数据库审计日志"
+       ],
+       'code_level_fixes': [
+           "使用参数化查询(PreparedStatement)替代字符串拼接",
+           "实施严格的输入验证和数据类型检查", 
+           "采用白名单方式过滤用户输入",
+           "使用ORM框架规避直接SQL操作"
+       ],
+       'system_level_hardening': [
+           "配置数据库用户最小权限原则",
+           "启用数据库连接加密(SSL/TLS)",
+           "部署Web应用防火墙(WAF)防护",
+           "实施数据库访问白名单机制"
+       ],
+       'monitoring_measures': [
+           "建立SQL注入攻击实时监控告警",
+           "定期执行自动化安全扫描验证",
+           "实施异常查询模式检测",
+           "建立安全事件响应流程"
+       ]
+   }
+   
+   # 根据风险等级调整建议
+   if risk_level == "CRITICAL":
+       base_recommendations['immediate_actions'].insert(0, "立即断开受影响应用的网络连接")
+       base_recommendations['immediate_actions'].append("紧急联系安全团队进行应急响应")
+       
+   if risk_factors.get('privilege_escalation'):
+       base_recommendations['system_level_hardening'].append("立即检查数据库管理员权限分配")
+       base_recommendations['system_level_hardening'].append("重置数据库管理员密码")
+       
+   if risk_factors.get('data_extraction'):
+       base_recommendations['immediate_actions'].append("检查敏感数据是否已被非法访问")
+       base_recommendations['monitoring_measures'].append("加强数据访问监控和DLP防护")
+       
+   if risk_factors.get('file_system_access'):
+       base_recommendations['system_level_hardening'].append("限制数据库服务的文件系统访问权限")
+       base_recommendations['monitoring_measures'].append("监控文件系统异常访问行为")
+   
+   return base_recommendations
+
+def generate_financial_web_security_recommendations():
+   """生成金融Web应用专门安全建议"""
+   financial_specific_measures = {
+       'data_protection': [
+           "实施敏感数据字段级加密存储",
+           "采用tokenization技术保护支付卡信息",
+           "建立数据脱敏机制保护客户隐私信息",
+           "实施数据库透明加密(TDE)"
+       ],
+       'access_control': [
+           "实施多因子认证机制",
+           "建立基于角色的细粒度访问控制(RBAC)",
+           "配置严格的会话超时和并发控制",
+           "实施API访问频率限制"
+       ],
+       'transaction_security': [
+           "实施交易完整性校验和数字签名",
+           "建立实时交易风险评分和监控",
+           "部署反欺诈检测和行为分析系统",
+           "实施交易金额和频次限制"
+       ],
+       'compliance_requirements': [
+           "确保满足PCI-DSS数据安全标准要求",
+           "符合等保2.0三级以上安全要求",
+           "建立符合央行监管要求的审计体系",
+           "实施GDPR等数据保护法规要求"
+       ]
+   }
+   
+   return financial_specific_measures
+
+def analyze_attack_surface(target_url, sqlmap_output):
+   """分析Web应用攻击面"""
+   attack_surface = {
+       'input_vectors': [],
+       'risk_areas': [],
+       'exposed_interfaces': [],
+       'security_headers': {}
+   }
+   
+   # 分析URL结构识别输入向量
+   if '?' in target_url:
+       query_params = target_url.split('?')[1]
+       params = query_params.split('&')
+       for param in params:
+           if '=' in param:
+               param_name = param.split('=')[0]
+               attack_surface['input_vectors'].append(f"GET parameter: {param_name}")
+   
+   # 基于SQLMap输出分析风险区域
+   output_lower = sqlmap_output.lower()
+   
+   if 'post' in output_lower:
+       attack_surface['input_vectors'].append("POST parameters")
+   if 'cookie' in output_lower:
+       attack_surface['input_vectors'].append("HTTP Cookies")
+   if 'header' in output_lower:
+       attack_surface['input_vectors'].append("HTTP Headers")
+   
+   # 识别暴露的接口类型
+   if 'login' in target_url.lower():
+       attack_surface['risk_areas'].append("Authentication interface")
+   if any(keyword in target_url.lower() for keyword in ['admin', 'manage', 'control']):
+       attack_surface['risk_areas'].append("Administrative interface")
+   if any(keyword in target_url.lower() for keyword in ['api', 'service', 'rest']):
+       attack_surface['risk_areas'].append("API endpoint")
+   
+   return attack_surface
+
+def skip_sql_scan():
+   """返回跳过SQL扫描的标准结果"""
+   return {
+       "tool": "sqlmap",
+       "component": "web_application", 
+       "target": "N/A",
+       "scan_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+       "status": "skipped",
+       "message": "用户选择跳过SQL注入检测",
+       "vulnerabilities": [],
+       "summary": {
+           "injection_found": False,
+           "risk_level": "N/A",
+           "scan_performed": False
+       }
+   }
 
 def run_sqlmap(target_url, dump_dbs=False):
-    """
-    自动调用 SQLMap 工具，对指定目标进行 SQL 注入检测。
-    
-    参数：
-    - target_url (str): 要扫描的 URL，例如 http://127.0.0.1/test.php?id=3
-    - dump_dbs (bool): 是否添加 --dbs 参数，尝试列出目标数据库
+   """
+   自动调用 SQLMap 工具，对指定目标进行 SQL 注入检测。
+   增强版：包含智能分析和风险评估
+   """
+   # 如果没有提供目标URL，返回跳过结果
+   if not target_url:
+       return skip_sql_scan()
+   
+   print(f"[*] 开始扫描：{target_url}")
+   
+   # 设置 SQLMap 工具路径
+   sqlmap_path = "/home/zy2/sqlmap/sqlmap.py"
+   if not os.path.exists(sqlmap_path):
+       print("[!] SQLMap 工具未找到，请确认 sqlmap.py 路径是否正确！")
+       return {
+           "tool": "sqlmap",
+           "status": "fail", 
+           "error": "SQLMap tool not found",
+           "vulnerabilities": []
+       }
+   
+   # 构造命令
+   cmd = f"python3 {sqlmap_path} -u \"{target_url}\" --batch"
+   if dump_dbs:
+       cmd += " --dbs"
+   
+   print(f"[*] 正在执行命令：{cmd}")
+   
+   try:
+       # 执行命令，捕获输出
+       result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=300)
+       
+       # 智能分析SQLMap输出
+       risk_level, risk_factors = assess_sql_injection_risk(result.stdout)
+       injection_types = identify_injection_types(result.stdout)
+       db_info = extract_database_info(result.stdout)
+       attack_surface = analyze_attack_surface(target_url, result.stdout)
+       
+       # 生成详细漏洞报告
+       vulnerabilities = []
+       
+       if risk_level != "SAFE":
+           # 生成修复建议
+           fix_recommendations = generate_sql_injection_fix_recommendations(
+               {'target': target_url, 'database_info': db_info}, 
+               risk_level, 
+               risk_factors
+           )
+           
+           # 金融行业特殊建议
+           financial_recommendations = generate_financial_web_security_recommendations()
+           
+           vulnerability = {
+               "type": "sql_injection",
+               "name": f"SQL注入漏洞 - {target_url}",
+               "severity": risk_level,
+               "description": f"在目标URL检测到SQL注入漏洞。注入类型: {', '.join(injection_types)}",
+               "injection_types": injection_types,
+               "database_info": db_info,
+               "risk_factors": risk_factors,
+               "attack_surface": attack_surface,
+               "recommendation": f"[{risk_level}] 立即实施参数化查询和输入验证",
+               "detailed_recommendations": fix_recommendations,
+               "financial_security_measures": financial_recommendations,
+               "compliance": "违反PCI-DSS、等保2.0等安全规范"
+           }
+           
+           vulnerabilities.append(vulnerability)
+       
+       # 构建返回结果
+       scan_result = {
+           "tool": "sqlmap",
+           "component": "web_application",
+           "target": target_url,
+           "scan_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+           "status": "success",
+           "risk_level": risk_level,
+           "vulnerabilities": vulnerabilities,
+           "summary": {
+               "injection_found": risk_level != "SAFE",
+               "risk_level": risk_level,
+               "injection_types_count": len(injection_types),
+               "database_type": db_info['database_type'],
+               "attack_vectors": len(attack_surface['input_vectors'])
+           },
+           "raw_output": result.stdout[:1000] + "..." if len(result.stdout) > 1000 else result.stdout
+       }
+       
+       # 打印分析结果
+       print_sql_scan_summary(scan_result)
+       
+       return scan_result
+       
+   except subprocess.TimeoutExpired:
+       print("[!] SQLMap 扫描超时")
+       return {
+           "tool": "sqlmap",
+           "status": "timeout",
+           "error": "Scan timeout after 300 seconds",
+           "vulnerabilities": []
+       }
+   except Exception as e:
+       print(f"[!] 执行 SQLMap 时发生错误：{e}")
+       return {
+           "tool": "sqlmap", 
+           "status": "fail",
+           "error": str(e),
+           "vulnerabilities": []
+       }
 
-    返回：
-    - 扫描结果字符串（命令输出）
-    """
-    
-    print(f"[*] 开始扫描：{target_url}")
-    
-    # 1. 设置 SQLMap 工具路径（你需要根据实际位置修改）
-    # 比如你下载到项目根目录下的 tools/sqlmap/ 里
-    sqlmap_path = "/home/zy2/sqlmap/sqlmap.py"  # 修改为你的 sqlmap.py 路径
+def print_sql_scan_summary(scan_result):
+   """打印SQL扫描结果摘要"""
+   print("\n" + "="*60)
+   print(" SQLMap 扫描结果分析报告")
+   print("="*60)
+   
+   summary = scan_result.get('summary', {})
+   print(f"扫描目标: {scan_result['target']}")
+   print(f"扫描时间: {scan_result['scan_time']}")
+   print(f"风险等级: {scan_result['risk_level']}")
+   print(f"发现注入: {'是' if summary.get('injection_found') else '否'}")
+   
+   if summary.get('injection_found'):
+       print(f"数据库类型: {summary.get('database_type', 'Unknown')}")
+       print(f"注入类型数: {summary.get('injection_types_count', 0)}")
+       print(f"攻击向量数: {summary.get('attack_vectors', 0)}")
+       
+       if scan_result.get('vulnerabilities'):
+           vuln = scan_result['vulnerabilities'][0]
+           print(f"\n检测到的注入类型:")
+           for injection_type in vuln.get('injection_types', []):
+               print(f"  - {injection_type}")
+           
+           print(f"\n风险因素分析:")
+           risk_factors = vuln.get('risk_factors', {})
+           for factor, detected in risk_factors.items():
+               status = "检测到" if detected else "未检测到"
+               print(f"  - {factor}: {status}")
+           
+           print(f"\n核心修复建议:")
+           recommendations = vuln.get('detailed_recommendations', {})
+           immediate_actions = recommendations.get('immediate_actions', [])
+           for i, action in enumerate(immediate_actions[:3], 1):
+               print(f"  {i}. {action}")
+   
+   print("="*60)
 
-
-    if not os.path.exists(sqlmap_path):
-        print("[!] SQLMap 工具未找到，请确认 sqlmap.py 路径是否正确！")
-        return "Error: sqlmap.py not found"
-
-    # 2. 构造命令：python3 sqlmap.py -u <url> --batch [--dbs]
-    cmd = f"python3 {sqlmap_path} -u \"{target_url}\" --batch"
-    
-    # 如果需要导出数据库名，加上 --dbs 参数
-    if dump_dbs:
-        cmd += " --dbs"
-
-    print(f"[*] 正在执行命令：{cmd}")
-
-    try:
-        # 3. 执行命令，捕获输出（包括stdout和stderr）
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-
-        # 4. 打印扫描输出
-        #print("\n==== SQLMap 输出结果 ====\n")
-        
-        #print(result.stdout)
-
-        if result.stderr:
-            print("\n==== 错误信息（如果有） ====\n")
-            print(result.stderr)
-
-            # 在 sqlmap_module.py 的 run_sqlmap 函数最后，将：
-
-        return {
-            "tool": "sqlmap",
-            "component": "web_application", 
-            "target": target_url,
-            "status": "success" if result.returncode == 0 else "fail",
-            "raw_output": result.stdout,
-            "suggestion": "检查发现的SQL注入点并修复参数化查询"
-        }  # 可以返回结果用于后续处理或保存
-
-    except Exception as e:
-        print(f"[!] 执行 SQLMap 时发生错误：{e}")
-        return f"Error: {e}"  
+# 测试函数
+if __name__ == "__main__":
+   print("SQLMap 增强版测试")
+   target = get_sql_target()
+   
+   if target:
+       result = run_sqlmap(target)
+       
+       if result.get('vulnerabilities'):
+           print(f"\n发现 {len(result['vulnerabilities'])} 个安全问题")
+       else:
+           print("\n未发现SQL注入漏洞")
+   else:
+       print("跳过SQL注入检测")
         </pre>
     </div>
     
@@ -2111,19 +2490,19 @@ if __name__ == "__main__":
     print(f"发现问题总数: {report['total_vulnerabilities']}")
     print(f"严重程度分布: {report['severity_distribution']}")
     print(f"合规性统计: {report['compliance_summary']}")
-        </pre>
+        <pre>
     </div>
     
     <div class="code-section">
         <h2>vuln_scanner.py</h2>
         <pre>
-# 检测系统中已安装的软件包是否存在已知漏洞，CVE 数据库对比
+# -*- coding: utf-8 -*-
 # modules/vuln_scanner.py
-# 模拟漏洞扫描模块，检测已知软件包是否存在漏洞
-
-
+# 检测系统中已安装的软件包是否存在已知漏洞，CVE 数据库对比
 import subprocess
 import json
+import re
+from datetime import datetime
 
 def get_vuln_target():
     scan_dir = input("请输入漏洞扫描目录 (回车使用默认): ").strip()
@@ -2134,6 +2513,143 @@ def get_vuln_target():
         print(f"扫描目录: {scan_dir}")
     return scan_dir
 
+def generate_intelligent_recommendation(vulnerability):
+    """
+    基于漏洞信息生成智能化修复建议
+    """
+    package = vulnerability.get('package', '')
+    version = vulnerability.get('version', '')
+    cve = vulnerability.get('cve', '')
+    severity = vulnerability.get('severity', 'MEDIUM')
+    title = vulnerability.get('title', '')
+    description = vulnerability.get('description', '')
+    
+    # 基础修复建议
+    base_recommendation = f"升级 {package} 软件包"
+    
+    # 根据严重性等级生成不同的处理策略
+    if severity == 'CRITICAL':
+        recommendation = {
+            'priority': 'URGENT',
+            'timeframe': '立即处理（24小时内）',
+            'actions': [
+                f"1. 立即评估 {package} 组件的业务影响范围",
+                f"2. 紧急制定临时缓解措施，如防火墙规则限制访问",
+                f"3. 安排紧急维护窗口升级到安全版本",
+                f"4. 执行命令: yum update {package}",
+                f"5. 升级后立即验证系统功能正常性"
+            ],
+            'risk_level': '极高风险 - 可能导致系统完全被控制',
+            'business_impact': '可能造成数据泄露、服务中断或系统被恶意控制'
+        }
+    elif severity == 'HIGH':
+        recommendation = {
+            'priority': 'HIGH',
+            'timeframe': '72小时内制定处置计划',
+            'actions': [
+                f"1. 详细评估 {package} 漏洞的具体风险影响",
+                f"2. 制定补丁测试验证方案",
+                f"3. 安排维护窗口进行升级: yum update {package}",
+                f"4. 实施业务连续性保障措施",
+                f"5. 更新后进行安全验证测试"
+            ],
+            'risk_level': '高风险 - 可能被远程利用',
+            'business_impact': '可能影响系统安全性和业务连续性'
+        }
+    elif severity == 'MEDIUM':
+        recommendation = {
+            'priority': 'MEDIUM',
+            'timeframe': '1-2周内纳入常规维护计划',
+            'actions': [
+                f"1. 将 {package} 升级纳入下次维护计划",
+                f"2. 评估是否需要临时防护措施",
+                f"3. 在维护窗口执行: yum update {package}",
+                f"4. 验证升级后系统稳定性"
+            ],
+            'risk_level': '中等风险 - 存在安全隐患',
+            'business_impact': '对业务影响相对有限，但应及时修复'
+        }
+    else:  # LOW
+        recommendation = {
+            'priority': 'LOW',
+            'timeframe': '下次定期维护时处理',
+            'actions': [
+                f"1. 将 {package} 升级纳入定期批量更新计划",
+                f"2. 与其他低风险漏洞一起批量处理",
+                f"3. 执行批量更新: yum update"
+            ],
+            'risk_level': '低风险 - 影响有限',
+            'business_impact': '对业务影响很小，可通过定期维护解决'
+        }
+    
+    # 根据软件包类型添加特殊建议
+    if 'kernel' in package.lower():
+        recommendation['special_notes'] = [
+            "[注意] 内核组件升级需要重启系统",
+            "建议在业务低峰期进行操作",
+            "升级前做好系统备份"
+        ]
+    elif any(db in package.lower() for db in ['mysql', 'mariadb', 'postgresql']):
+        recommendation['special_notes'] = [
+            "[注意] 数据库组件升级需要特别谨慎",
+            "升级前务必备份数据库",
+            "建议先在测试环境验证"
+        ]
+    elif any(web in package.lower() for web in ['nginx', 'apache', 'httpd']):
+        recommendation['special_notes'] = [
+            "[注意] Web服务器组件升级",
+            "注意检查配置文件兼容性",
+            "升级后验证网站访问正常"
+        ]
+    elif 'ssl' in package.lower() or 'tls' in package.lower() or 'crypto' in package.lower():
+        recommendation['special_notes'] = [
+            "[重要] 加密组件升级 - 金融行业关键",
+            "可能影响SSL/TLS证书和加密通信",
+            "升级后验证所有加密连接正常"
+        ]
+    
+    # 根据CVE描述添加具体风险说明
+    if 'remote' in description.lower():
+        recommendation['exploit_risk'] = '[警告] 可远程利用 - 风险等级提升'
+    elif 'authentication' not in description.lower():
+        recommendation['exploit_risk'] = '[警告] 无需认证即可利用'
+    
+    return recommendation
+
+def format_recommendation_output(vuln_data, recommendation):
+    """
+    格式化输出修复建议
+    """
+    package = vuln_data.get('package', '')
+    cve = vuln_data.get('cve', '')
+    severity = vuln_data.get('severity', '')
+    
+    output = []
+    output.append(f"\n{'='*60}")
+    output.append(f"漏洞修复建议: {package} ({cve})")
+    output.append(f"严重程度: {severity} | 优先级: {recommendation['priority']}")
+    output.append(f"{'='*60}")
+    
+    output.append(f"\n处理时间框架: {recommendation['timeframe']}")
+    output.append(f"风险评估: {recommendation['risk_level']}")
+    output.append(f"业务影响: {recommendation['business_impact']}")
+    
+    if recommendation.get('exploit_risk'):
+        output.append(f"利用风险: {recommendation['exploit_risk']}")
+    
+    output.append(f"\n修复步骤:")
+    for action in recommendation['actions']:
+        output.append(f"   {action}")
+    
+    if recommendation.get('special_notes'):
+        output.append(f"\n特别注意:")
+        for note in recommendation['special_notes']:
+            output.append(f"   {note}")
+    
+    output.append(f"\n{'-'*60}\n")
+    
+    return '\n'.join(output)
+
 def scan_vulnerabilities(target_dir="."):
     """
     使用 Trivy 扫描当前目录下的操作系统软件包。
@@ -2143,80 +2659,135 @@ def scan_vulnerabilities(target_dir="."):
     
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        
         if result.returncode != 0:
             print(f"[*] Trivy 执行失败: {result.stderr}")
             return {"tool": "trivy", "status": "fail", "error": f"Command failed: {result.stderr}"}
-        
+
         if not result.stdout.strip():
             print(f"[*] 没有检测到漏洞")
             return {"tool": "trivy", "component": "system_package", "target": target_dir, "vulnerabilities": [], "status": "no_vuln"}
-        
+
         data = json.loads(result.stdout)
         findings = []
         
         for vuln in data.get("Results", []):
             for v in vuln.get("Vulnerabilities", []):
-                findings.append({
+                vuln_data = {
                     "package": v.get("PkgName"),
                     "version": v.get("InstalledVersion"),
                     "cve": v.get("VulnerabilityID"),
                     "severity": v.get("Severity"),
                     "title": v.get("Title", ""),
-                    "description": v.get("Description", "")[:100] + "..." if len(v.get("Description", "")) > 100 else v.get("Description", "")
-                })
+                    "description": v.get("Description", "")[:200] + "..." if len(v.get("Description", "")) > 200 else v.get("Description", "")
+                }
+                
+                # 生成智能化修复建议
+                recommendation = generate_intelligent_recommendation(vuln_data)
+                
+                # 转换为标准格式，兼容现有系统
+                vuln_entry = {
+                    "type": "software_vulnerability",
+                    "name": f"{vuln_data['package']} - {vuln_data['cve']}",
+                    "severity": vuln_data['severity'],
+                    "description": f"{vuln_data['title']}. 当前版本: {vuln_data['version']}",
+                    "recommendation": f"[{recommendation['priority']}] {recommendation['timeframe']} - {recommendation['actions'][0]}",
+                    "detailed_recommendation": recommendation,  # 保存详细建议
+                    "compliance": "信息安全漏洞管理要求",
+                    "package_info": vuln_data
+                }
+                
+                findings.append(vuln_entry)
+
+        # 按严重性和优先级排序
+        priority_order = {'URGENT': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
+        severity_order = {'CRITICAL': 0, 'HIGH': 1, 'MEDIUM': 2, 'LOW': 3}
         
+        findings.sort(key=lambda x: (
+            priority_order.get(x['detailed_recommendation']['priority'], 3),
+            severity_order.get(x['severity'], 3)
+        ))
+
         # 统计漏洞
         severity_count = {}
         package_count = {}
+        priority_count = {}
         
         for finding in findings:
             severity = finding['severity']
-            package = finding['package']
+            package = finding['package_info']['package']
+            priority = finding['detailed_recommendation']['priority']
             
             severity_count[severity] = severity_count.get(severity, 0) + 1
             package_count[package] = package_count.get(package, 0) + 1
-        
+            priority_count[priority] = priority_count.get(priority, 0) + 1
+
         fresult = {
             "tool": "trivy",
-            "component": "system_package",
+            "component": "system_package", 
             "target": target_dir,
             "vulnerabilities": findings,
             "severity_summary": severity_count,
             "package_summary": package_count,
+            "priority_summary": priority_count,
             "total_vulnerabilities": len(findings),
             "status": "success" if findings else "no_vuln"
         }
-        
+
         # 美化输出
         print("\n" + "="*60)
-        print("                 TRIVY 扫描结果摘要")
+        print(" TRIVY 扫描结果摘要 ")
         print("="*60)
         print(f"扫描目标: {target_dir}")
         print(f"总漏洞数: {len(findings)}")
         print(f"扫描状态: {'发现漏洞' if findings else '无漏洞'}")
-        
+
         if findings:
             print("\n漏洞严重程度分布:")
             for severity in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
                 count = severity_count.get(severity, 0)
                 if count > 0:
-                    print(f"  {severity:<10}: {count:>3} 个")
+                    print(f" {severity:<10}: {count:>3} 个")
             
+            print("\n处理优先级分布:")
+            for priority in ['URGENT', 'HIGH', 'MEDIUM', 'LOW']:
+                count = priority_count.get(priority, 0)
+                if count > 0:
+                    print(f" {priority:<10}: {count:>3} 个")
+
             print("\n受影响的包 (Top 5):")
             sorted_packages = sorted(package_count.items(), key=lambda x: x[1], reverse=True)
             for package, count in sorted_packages[:5]:
-                print(f"  {package:<20}: {count:>3} 个漏洞")
-        
+                print(f" {package:<20}: {count:>3} 个漏洞")
+            
+            # 显示前3个最高优先级的详细建议
+            print("\n" + "="*60)
+            print(" TOP 3 高优先级漏洞详细修复建议")
+            print("="*60)
+            
+            for i, finding in enumerate(findings[:3], 1):
+                print(f"\n[{i}] {finding['name']}")
+                rec = finding['detailed_recommendation']
+                print(f"   优先级: {rec['priority']} | 时间框架: {rec['timeframe']}")
+                print(f"   风险等级: {rec['risk_level']}")
+                print(f"   修复步骤: {rec['actions'][0]}")
+                if rec.get('special_notes'):
+                    print(f"   特别注意: {rec['special_notes'][0]}")
+                print("-" * 40)
+
         print("="*60)
         return fresult
-        
+
     except json.JSONDecodeError as e:
         print(f"[*] JSON 解析失败: {e}")
         return {"tool": "trivy", "status": "fail", "error": f"JSON parsing failed: {str(e)}"}
     except Exception as e:
         print(f"[*] 扫描失败: {e}")
         return {"tool": "trivy", "status": "fail", "error": str(e)}
+
+# 测试函数
+if __name__ == "__main__":
+    result = scan_vulnerabilities("/home/zy2/test")
+    print("\n扫描完成，结果已保存。")
         </pre>
     </div>
     
@@ -2234,14 +2805,14 @@ from typing import Dict, List, Any, Tuple, Union
 import numpy as np
 
 class OMToolEvaluator:
-    """智能运维工具评测器 - 修复版"""
+    """智能运维工具评测器"""
     
     def __init__(self):
         self.metrics = {}
         self.test_cases = []
         
     def evaluate_detection_accuracy(self, results: List[Dict]) -> Dict[str, Union[float, int]]:
-        """评估检测准确率 - 修复版"""
+        """评估检测准确率"""
         metrics: Dict[str, Union[float, int]] = {
             'modules_success_rate': 0.0,
             'detection_coverage': 0.0,
@@ -2365,7 +2936,7 @@ class OMToolEvaluator:
         return metrics
     
     def evaluate_fault_analysis_metrics(self, results: List[Dict]) -> Dict[str, Union[float, int]]:
-        """评估故障分析的量化指标 - 修复版"""
+        """评估故障分析的量化指标"""
         fault_metrics: Dict[str, Union[float, int]] = {
             'analysis_accuracy': 0.0,
             'fault_detection_rate': 0.0,
@@ -2462,7 +3033,7 @@ class OMToolEvaluator:
         return fault_metrics
     
     def evaluate_repair_metrics(self, results: List[Dict]) -> Dict[str, Union[float, int]]:
-        """评估修复成功率等指标 - 修复版"""
+        """评估修复成功率等指标"""
         repair_metrics: Dict[str, Union[float, int]] = {
             'repair_success_rate': 0.0,
             'auto_repair_rate': 0.0,
@@ -2520,7 +3091,7 @@ class OMToolEvaluator:
         return repair_metrics
     
     def evaluate_model_performance(self, results: List[Dict]) -> Dict[str, Union[float, int]]:
-        """评估模型性能指标 - 修复版"""
+        """评估模型性能指标"""
         model_metrics: Dict[str, Union[float, int]] = {
             'precision': 0.0,
             'recall': 0.0,
@@ -2588,7 +3159,7 @@ class OMToolEvaluator:
         return model_metrics
     
     def evaluate_solution_effectiveness(self, results: List[Dict]) -> Dict[str, Union[float, int]]:
-        """评估解决方案有效性 - 修复版"""
+        """评估解决方案有效性"""
         effectiveness: Dict[str, Union[float, int]] = {
             'actionable_suggestions': 0.0,
             'solution_completeness': 0.0,
@@ -2959,7 +3530,7 @@ class OMToolEvaluator:
     
     def generate_evaluation_report(self, results: List[Dict]) -> Dict:
         """生成完整的评测报告"""
-        print("\n开始生成增强版评测报告...")
+        print("\n开始生成评测报告...")
         
         # 各维度评估
         accuracy_metrics = self.evaluate_detection_accuracy(results)
@@ -3049,7 +3620,7 @@ class OMToolEvaluator:
     def _print_evaluation_summary(self, report: Dict):
         """打印评测摘要"""
         print("\n" + "="*70)
-        print("智能运维工具评测报告 - 增强版")
+        print("智能运维工具评测报告")
         print("="*70)
         
         summary = report['test_summary']
@@ -3192,11 +3763,11 @@ def main():
     with open('enhanced_evaluation_report.json', 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     
-    print(f"\n增强版评测报告已保存到: enhanced_evaluation_report.json")
+    print(f"\n评测报告已保存到: enhanced_evaluation_report.json")
 
 if __name__ == "__main__":
-    main()
-        </pre>
+    main()        
+	     </pre>
     </div>
 	
     <div class="code-section">
